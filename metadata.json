@@ -1,0 +1,5 @@
+{
+  "name": "QualiVision",
+  "description": "A professional qualitative analysis tool for video researchers. Features AI-powered subtitle generation, custom behavioral coding, interactive timeline visualization, and comprehensive data export.",
+  "requestFramePermissions": []
+}
