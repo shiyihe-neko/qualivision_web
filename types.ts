@@ -3,8 +3,8 @@ export interface Subtitle {
   id: string;
   startTime: number;
   endTime: number;
-  html: string; // Rich text notes
-  codeId?: string; // Links to transcriptCodes
+  html: string; 
+  codeId?: string; 
 }
 
 export interface CodeDefinition {
@@ -22,10 +22,18 @@ export interface NoteDefinition {
 
 export interface CodedSegment {
   id: string;
-  codeId: string; // Links to timelineCodes
+  streamId: string; // 关联到具体的 Stream
+  codeId: string; 
   startTime: number;
   endTime: number;
   note?: string;
+}
+
+export interface TimelineStream {
+  id: string;
+  name: string;
+  isLocked: boolean;
+  codes: CodeDefinition[]; // 每条流独立的编码组
 }
 
 export interface Project {
@@ -35,14 +43,14 @@ export interface Project {
   videoUrlType: 'file' | 'url';
   createdAt: number;
   lastModified: number;
-  videoDataUrl?: string; 
   subtitles: Subtitle[];
   segments: CodedSegment[];
   
-  // SEPARATED CODING SYSTEMS
-  timelineCodes: CodeDefinition[];
+  // 多流系统
+  streams: TimelineStream[];
+  
   transcriptCodes: CodeDefinition[];
-  notePalette: NoteDefinition[]; // New: Customizable note colors
+  notePalette: NoteDefinition[];
   
   duration: number; 
 }
