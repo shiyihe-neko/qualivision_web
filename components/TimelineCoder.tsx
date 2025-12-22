@@ -1,7 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { CodedSegment, TimelineStream, UNCODED_COLOR, UNCODED_LABEL } from '../types';
-import { Play, Pause, Settings2, Trash2, Lock, Unlock, Plus, ChevronUp, ChevronDown, Check } from 'lucide-react';
+import { Play, Pause, Settings2, Trash2, Lock, Unlock, Plus, Check } from 'lucide-react';
+
+interface ActiveCoding {
+  codeId: string;
+  startTime: number;
+}
 
 interface TimelineCoderProps {
   duration: number;
@@ -32,9 +37,8 @@ const TimelineCoder: React.FC<TimelineCoderProps> = ({
   onOpenCodeManager,
   onAddStream
 }) => {
-  const [activeStreamId, setActiveStreamId] = useState<string | null>(null);
-  const [activeCodeId, setActiveCodeId] = useState<string | null>(null);
-  const [activeSegmentStart, setActiveSegmentStart] = useState<number | null>(null);
+  // 核心变更：使用 Map 结构记录每条流的活动状态
+  const [activeCodings, setActiveCodings] = useState<Record<string, ActiveCoding>>({});
   const timelineContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,14 +46,17 @@ const TimelineCoder: React.FC<TimelineCoderProps> = ({
       const target = e.target as HTMLElement;
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
       
-      const activeStream = (streams || []).find(s => !s.isLocked);
-      if (!activeStream) return;
-
-      const code = activeStream.codes.find(c => c.shortcut === e.key);
-      if (code) {
-        e.preventDefault(); 
-        handleCodeToggle(activeStream.id, code.id);
-      }
+      // 找到所有未锁定的流
+      const unlockedStreams = (streams || []).filter(s => !s.isLocked);
+      
+      // 遍历未锁定流，检查是否有匹配的快捷键
+      unlockedStreams.forEach(stream => {
+        const code = stream.codes.find(c => c.shortcut === e.key);
+        if (code) {
+          e.preventDefault(); 
+          handleCodeToggle(stream.id, code.id);
+        }
+      });
       
       if (e.code === 'Space') {
           e.preventDefault();
@@ -58,49 +65,71 @@ const TimelineCoder: React.FC<TimelineCoderProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [streams, activeCodeId, activeSegmentStart, currentTime, onTogglePlay]);
+  }, [streams, activeCodings, currentTime, onTogglePlay]);
 
+  // 当视频暂停时，结束所有流的录制
   useEffect(() => {
-    if (!isPlaying && activeCodeId) stopCoding();
+    if (!isPlaying) {
+      stopAllCodings();
+    }
   }, [isPlaying]);
 
   const handleCodeToggle = (streamId: string, codeId: string) => {
     const stream = streams.find(s => s.id === streamId);
     if (!stream || stream.isLocked) return;
 
-    if (activeStreamId === streamId && activeCodeId === codeId) {
-      stopCoding();
+    const currentActive = activeCodings[streamId];
+
+    if (currentActive && currentActive.codeId === codeId) {
+      // 如果点击的是同一个编码，停止录制
+      stopCoding(streamId);
     } else {
-      if (activeCodeId) stopCoding();
+      // 如果点击的是不同编码或当前没在录制
+      // 先停止当前流的旧录制（如果有）
+      if (currentActive) {
+        stopCoding(streamId);
+      }
+      // 启动新录制
       startCoding(streamId, codeId);
     }
   };
 
   const startCoding = (streamId: string, codeId: string) => {
-    setActiveStreamId(streamId);
-    setActiveCodeId(codeId);
-    setActiveSegmentStart(currentTime);
+    setActiveCodings(prev => ({
+      ...prev,
+      [streamId]: { codeId, startTime: currentTime }
+    }));
   };
 
-  const stopCoding = () => {
-    if (activeStreamId && activeCodeId && activeSegmentStart !== null) {
-      if (currentTime - activeSegmentStart > 0.1) {
+  const stopCoding = (streamId: string) => {
+    const active = activeCodings[streamId];
+    if (active) {
+      if (currentTime - active.startTime > 0.1) {
         onAddSegment({
-          id: `seg_${Date.now()}`,
-          streamId: activeStreamId,
-          codeId: activeCodeId,
-          startTime: activeSegmentStart,
+          id: `seg_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+          streamId: streamId,
+          codeId: active.codeId,
+          startTime: active.startTime,
           endTime: currentTime,
         });
       }
-      setActiveStreamId(null);
-      setActiveCodeId(null);
-      setActiveSegmentStart(null);
+      setActiveCodings(prev => {
+        const next = { ...prev };
+        delete next[streamId];
+        return next;
+      });
     }
   };
 
+  const stopAllCodings = () => {
+    // 遍历所有正在录制的流并生成片段
+    Object.keys(activeCodings).forEach(streamId => {
+      stopCoding(streamId);
+    });
+  };
+
   const toggleLock = (streamId: string) => {
-    if (activeStreamId === streamId) stopCoding();
+    if (activeCodings[streamId]) stopCoding(streamId);
     onUpdateStreams(streams.map(s => s.id === streamId ? { ...s, isLocked: !s.isLocked } : s));
   };
 
@@ -108,6 +137,11 @@ const TimelineCoder: React.FC<TimelineCoderProps> = ({
     if (streams.length <= 1) return alert("Must have at least one stream.");
     if (confirm("Delete this entire stream and all its coded data?")) {
       onUpdateStreams(streams.filter(s => s.id !== streamId));
+      setActiveCodings(prev => {
+        const next = { ...prev };
+        delete next[streamId];
+        return next;
+      });
     }
   };
 
@@ -144,111 +178,116 @@ const TimelineCoder: React.FC<TimelineCoderProps> = ({
 
       {/* Streams 列表 */}
       <div className="flex-1 flex flex-col gap-8 mt-4" ref={timelineContainerRef}>
-        {(streams || []).map((stream, idx) => (
-          <div key={stream.id} className="flex flex-col gap-2 group/stream relative">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-800 px-2 py-1 rounded">Stream {idx + 1}: {stream.name}</span>
-                {stream.isLocked ? (
-                  <span className="flex items-center gap-1 text-[10px] text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20"><Lock className="w-3 h-3"/> Locked</span>
-                ) : (
-                  <span className="flex items-center gap-1 text-[10px] text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20"><Unlock className="w-3 h-3"/> Editing</span>
-                )}
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <div className="flex gap-1 flex-wrap justify-end">
-                  {stream.codes.map(code => (
-                    <button
-                      key={code.id}
-                      type="button"
-                      disabled={stream.isLocked}
-                      onClick={() => handleCodeToggle(stream.id, code.id)}
-                      style={{ 
-                        borderColor: (activeStreamId === stream.id && activeCodeId === code.id) ? code.color : 'transparent',
-                        backgroundColor: (activeStreamId === stream.id && activeCodeId === code.id) ? `${code.color}20` : '#1e293b'
-                      }}
-                      className={`px-3 py-1.5 rounded-lg border-2 text-[10px] font-bold text-slate-200 transition-all flex items-center gap-1.5 ${stream.isLocked ? 'opacity-20 cursor-not-allowed' : 'hover:bg-slate-700 active:scale-95'}`}
-                    >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: code.color }} />
-                      {code.label}
-                      <span className="opacity-40 font-mono">{code.shortcut}</span>
-                    </button>
-                  ))}
+        {(streams || []).map((stream, idx) => {
+          const activeForThisStream = activeCodings[stream.id];
+          
+          return (
+            <div key={stream.id} className="flex flex-col gap-2 group/stream relative">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-800 px-2 py-1 rounded">Stream {idx + 1}: {stream.name}</span>
+                  {stream.isLocked ? (
+                    <span className="flex items-center gap-1 text-[10px] text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20"><Lock className="w-3 h-3"/> Locked</span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-[10px] text-emerald-500 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20"><Unlock className="w-3 h-3"/> Editing</span>
+                  )}
                 </div>
                 
-                <div className="h-6 w-px bg-slate-800 mx-2" />
-                
-                <button 
-                  type="button"
-                  onClick={() => toggleLock(stream.id)}
-                  className={`p-1.5 rounded-lg transition-all ${stream.isLocked ? 'bg-slate-800 text-blue-400 hover:bg-slate-700' : 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/20'}`}
-                  title={stream.isLocked ? "Unlock to Edit" : "Save and Lock"}
-                >
-                  {stream.isLocked ? <Settings2 className="w-4 h-4"/> : <Check className="w-4 h-4"/>}
-                </button>
-                <button type="button" onClick={() => deleteStream(stream.id)} className="p-1.5 text-slate-600 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
-              </div>
-            </div>
-
-            <div 
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                onSeek((x / rect.width) * duration);
-              }}
-              className="relative h-10 bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden cursor-pointer shadow-inner"
-            >
-              <div className="absolute inset-0 opacity-10" style={{ backgroundColor: UNCODED_COLOR }} />
-              {segments.filter(s => s.streamId === stream.id).map(seg => {
-                const code = stream.codes.find(c => c.id === seg.codeId);
-                if (!code) return null;
-                return (
-                  <div
-                    key={seg.id}
-                    className="absolute top-0 bottom-0 border-x border-black/20 flex items-center justify-center group/seg"
-                    style={{ 
-                      left: `${(seg.startTime / duration) * 100}%`, 
-                      width: `${((seg.endTime - seg.startTime) / duration) * 100}%`, 
-                      backgroundColor: code.color 
-                    }}
-                  >
-                    {!stream.isLocked && (
-                      <button 
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1 flex-wrap justify-end">
+                    {stream.codes.map(code => (
+                      <button
+                        key={code.id}
                         type="button"
-                        onClick={(e) => { e.stopPropagation(); onDeleteSegment(seg.id); }}
-                        className="hidden group-hover/seg:flex items-center justify-center bg-black/60 p-1 rounded-full hover:bg-red-500 transition-colors"
+                        disabled={stream.isLocked}
+                        onClick={() => handleCodeToggle(stream.id, code.id)}
+                        style={{ 
+                          borderColor: (activeForThisStream?.codeId === code.id) ? code.color : 'transparent',
+                          backgroundColor: (activeForThisStream?.codeId === code.id) ? `${code.color}20` : '#1e293b'
+                        }}
+                        className={`px-3 py-1.5 rounded-lg border-2 text-[10px] font-bold text-slate-200 transition-all flex items-center gap-1.5 ${stream.isLocked ? 'opacity-20 cursor-not-allowed' : 'hover:bg-slate-700 active:scale-95'}`}
                       >
-                        <Trash2 className="w-2.5 h-2.5 text-white"/>
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: code.color }} />
+                        {code.label}
+                        <span className="opacity-40 font-mono">{code.shortcut}</span>
                       </button>
-                    )}
+                    ))}
                   </div>
-                );
-              })}
-              {activeStreamId === stream.id && activeCodeId && activeSegmentStart !== null && (
-                <div
-                  className="absolute top-0 bottom-0 opacity-60 animate-pulse border-x border-white/20"
-                  style={{ 
-                    left: `${(activeSegmentStart / duration) * 100}%`, 
-                    width: `${((currentTime - activeSegmentStart) / duration) * 100}%`,
-                    backgroundColor: stream.codes.find(c => c.id === activeCodeId)?.color 
-                  }}
-                />
-              )}
-              <div className="absolute top-0 bottom-0 w-px bg-white z-20 pointer-events-none shadow-[0_0_8px_white]" style={{ left: `${(currentTime / duration) * 100}%` }} />
-            </div>
+                  
+                  <div className="h-6 w-px bg-slate-800 mx-2" />
+                  
+                  <button 
+                    type="button"
+                    onClick={() => toggleLock(stream.id)}
+                    className={`p-1.5 rounded-lg transition-all ${stream.isLocked ? 'bg-slate-800 text-blue-400 hover:bg-slate-700' : 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/20'}`}
+                    title={stream.isLocked ? "Unlock to Edit" : "Save and Lock"}
+                  >
+                    {stream.isLocked ? <Settings2 className="w-4 h-4"/> : <Check className="w-4 h-4"/>}
+                  </button>
+                  <button type="button" onClick={() => deleteStream(stream.id)} className="p-1.5 text-slate-600 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4"/></button>
+                </div>
+              </div>
 
-            <button 
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onAddStream(idx + 1); }} 
-              className="absolute -bottom-5 left-1/2 -translate-x-1/2 opacity-0 group-hover/stream:opacity-100 transition-opacity p-1.5 bg-slate-800 border border-slate-700 rounded-full hover:bg-blue-600 z-50 shadow-xl" 
-              title="Add stream below"
-            >
-              <Plus className="w-3.5 h-3.5 text-white"/>
-            </button>
-          </div>
-        ))}
-        <div className="h-20" /> {/* 底部留空，方便添加按钮显示 */}
+              <div 
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  onSeek((x / rect.width) * duration);
+                }}
+                className="relative h-10 bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden cursor-pointer shadow-inner"
+              >
+                <div className="absolute inset-0 opacity-10" style={{ backgroundColor: UNCODED_COLOR }} />
+                {segments.filter(s => s.streamId === stream.id).map(seg => {
+                  const code = stream.codes.find(c => c.id === seg.codeId);
+                  if (!code) return null;
+                  return (
+                    <div
+                      key={seg.id}
+                      className="absolute top-0 bottom-0 border-x border-black/20 flex items-center justify-center group/seg"
+                      style={{ 
+                        left: `${(seg.startTime / duration) * 100}%`, 
+                        width: `${((seg.endTime - seg.startTime) / duration) * 100}%`, 
+                        backgroundColor: code.color 
+                      }}
+                    >
+                      {!stream.isLocked && (
+                        <button 
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); onDeleteSegment(seg.id); }}
+                          className="hidden group-hover/seg:flex items-center justify-center bg-black/60 p-1 rounded-full hover:bg-red-500 transition-colors"
+                        >
+                          <Trash2 className="w-2.5 h-2.5 text-white"/>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* 仅针对当前流显示其正在进行的录制进度 */}
+                {activeForThisStream && (
+                  <div
+                    className="absolute top-0 bottom-0 opacity-60 animate-pulse border-x border-white/20"
+                    style={{ 
+                      left: `${(activeForThisStream.startTime / duration) * 100}%`, 
+                      width: `${((currentTime - activeForThisStream.startTime) / duration) * 100}%`,
+                      backgroundColor: stream.codes.find(c => c.id === activeForThisStream.codeId)?.color 
+                    }}
+                  />
+                )}
+                <div className="absolute top-0 bottom-0 w-px bg-white z-20 pointer-events-none shadow-[0_0_8px_white]" style={{ left: `${(currentTime / duration) * 100}%` }} />
+              </div>
+
+              <button 
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onAddStream(idx + 1); }} 
+                className="absolute -bottom-5 left-1/2 -translate-x-1/2 opacity-0 group-hover/stream:opacity-100 transition-opacity p-1.5 bg-slate-800 border border-slate-700 rounded-full hover:bg-blue-600 z-50 shadow-xl" 
+                title="Add stream below"
+              >
+                <Plus className="w-3.5 h-3.5 text-white"/>
+              </button>
+            </div>
+          );
+        })}
+        <div className="h-20" />
       </div>
     </div>
   );
