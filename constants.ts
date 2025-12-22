@@ -40,7 +40,7 @@ export const INTERACTION_CODES: CodeDefinition[] = [
 
 export const DEFAULT_STREAMS_CONFIG = [
   { name: 'Behavioral Stream', codes: BEHAVIOR_CODES },
-  { name: 'Emotional State', codes: TOOL_CODES },
+  { name: 'Tool triggered Activities', codes: TOOL_CODES },
 ];
 
 export const DEFAULT_TIMELINE_CODES = BEHAVIOR_CODES;
