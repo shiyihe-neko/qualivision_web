@@ -6,7 +6,6 @@ const calculateEffectiveDuration = (project: Project) => {
   return duration || Math.max(...segments.map(s => s.endTime), ...subtitles.map(s => s.endTime), 10);
 };
 
-// 辅助函数：计算 Stream 的统计数据（用于饼图）
 const getStreamStatsData = (project: Project, stream: TimelineStream, effectiveDuration: number) => {
   const streamSegments = project.segments.filter(s => s.streamId === stream.id).sort((a, b) => a.startTime - b.startTime);
   const stats: Record<string, number> = {};
@@ -27,7 +26,6 @@ const getStreamStatsData = (project: Project, stream: TimelineStream, effectiveD
   ].filter(d => d.value > 0);
 };
 
-// 辅助函数：计算转录主题统计数据（用于直方图）
 const getTranscriptStatsData = (project: Project) => {
   return project.transcriptCodes.map(c => ({
     name: c.label,
@@ -74,7 +72,6 @@ export const generateHtmlContent = (project: Project): string => {
     const streamSegments = project.segments.filter(s => s.streamId === stream.id);
     const pieData = getStreamStatsData(project, stream, effectiveDuration);
     
-    // 收集流图表配置
     chartConfigs.push({
       type: 'pie',
       id: `chart-pie-${stream.id}`,
@@ -97,7 +94,6 @@ export const generateHtmlContent = (project: Project): string => {
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
-          <!-- 饼图区域 -->
           <div class="flex flex-col items-center">
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 self-start">Time Composition (%)</p>
             <div style="width: 100%; max-width: 260px; height: 260px;">
@@ -105,7 +101,6 @@ export const generateHtmlContent = (project: Project): string => {
             </div>
           </div>
 
-          <!-- 时间轴与详情区域 -->
           <div class="flex flex-col justify-center">
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Sequence Timeline Strip</p>
             <div style="position:relative; width:100%; height:48px; background:#f1f5f9; border-radius:12px; overflow:hidden; border: 1px solid #e2e8f0; margin-bottom: 24px;">
@@ -141,7 +136,6 @@ export const generateHtmlContent = (project: Project): string => {
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
         body { font-family: 'Inter', sans-serif; }
-        /* 强制清理掉转录内容中的任何潜在背景色，确保报告整洁 */
         .transcript-content, .transcript-content * {
           background-color: transparent !important;
         }
@@ -161,10 +155,8 @@ export const generateHtmlContent = (project: Project): string => {
         </div>
       </header>
 
-      <!-- 渲染所有分析流 -->
       ${streamSections}
 
-      <!-- 转录主题统计区域 -->
       <section class="grid grid-cols-1 lg:grid-cols-3 gap-10 mt-16 mb-20">
         <div class="lg:col-span-1">
           <h2 class="text-2xl font-black text-slate-800 mb-4 tracking-tight">Transcript Themes</h2>
@@ -177,7 +169,6 @@ export const generateHtmlContent = (project: Project): string => {
         </div>
       </section>
 
-      <!-- 转录脚本列表 -->
       <section class="mt-20">
         <h2 class="text-2xl font-black mb-8 text-slate-800 tracking-tight">Annotated Transcript</h2>
         <div class="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
@@ -206,13 +197,11 @@ export const generateHtmlContent = (project: Project): string => {
         </div>
       </section>
 
-      <!-- 图表初始化脚本 -->
       <script>
         window.addEventListener('load', function() {
           const streamCharts = ${JSON.stringify(chartConfigs)};
           const transcriptData = ${JSON.stringify(transcriptStats)};
           
-          // 渲染流饼图
           streamCharts.forEach(conf => {
             const el = document.getElementById(conf.id);
             if (!el) return;
@@ -242,7 +231,6 @@ export const generateHtmlContent = (project: Project): string => {
             });
           });
 
-          // 渲染转录直方图
           const tCtx = document.getElementById('transcriptChart');
           if (tCtx) {
             new Chart(tCtx.getContext('2d'), {
