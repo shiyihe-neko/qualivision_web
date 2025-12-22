@@ -1,7 +1,11 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Project, ViewMode, TimelineStream } from './types';
-import { DEFAULT_TIMELINE_CODES, DEFAULT_TRANSCRIPT_CODES, DEFAULT_NOTE_PALETTE } from './constants';
+import { Project, ViewMode, TimelineStream, CodeDefinition } from './types';
+import { 
+  DEFAULT_STREAMS_CONFIG, 
+  DEFAULT_TRANSCRIPT_CODES, 
+  DEFAULT_NOTE_PALETTE 
+} from './constants';
 import useUndoRedo from './hooks/useUndoRedo';
 import VideoPlayer, { VideoPlayerHandle } from './components/VideoPlayer';
 import TranscriptEditor from './components/TranscriptEditor';
@@ -34,13 +38,18 @@ const App: React.FC = () => {
 
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
-  // 移到外面以保持稳定
-  const createNewStream = useCallback((name: string): TimelineStream => ({
+  // 修改 createNewStream，支持传入自定义编码组
+  const createNewStream = useCallback((name: string, customCodes?: CodeDefinition[]): TimelineStream => ({
     id: `stream_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
     name,
     isLocked: false,
-    codes: [...DEFAULT_TIMELINE_CODES]
+    codes: customCodes ? [...customCodes] : [...DEFAULT_STREAMS_CONFIG[0].codes]
   }), []);
+
+  // 生成初始项目时使用的流
+  const getInitialStreams = useCallback(() => {
+    return DEFAULT_STREAMS_CONFIG.map(config => createNewStream(config.name, config.codes));
+  }, [createNewStream]);
 
   const initialProject: Project = {
     id: `proj_${Date.now()}`,
@@ -50,7 +59,7 @@ const App: React.FC = () => {
     lastModified: Date.now(),
     subtitles: [],
     segments: [],
-    streams: [], // 初始化为空，由 useEffect 补充
+    streams: getInitialStreams(), // 这里现在会根据配置生成多条流
     transcriptCodes: DEFAULT_TRANSCRIPT_CODES,
     notePalette: DEFAULT_NOTE_PALETTE,
     duration: 0,
@@ -62,28 +71,28 @@ const App: React.FC = () => {
     projects.find(p => p.id === activeProjectId) || initialProject
   );
 
-  // 核心修复：确保 project 永远有 streams
+  // 确保 project 永远有 streams
   useEffect(() => {
     if (project && (!project.streams || project.streams.length === 0)) {
         setProject(prev => ({
             ...prev,
-            streams: prev.streams && prev.streams.length > 0 ? prev.streams : [createNewStream('Primary Sequence')]
+            streams: getInitialStreams()
         }));
     }
-  }, [project.id]);
+  }, [project.id, getInitialStreams, setProject]);
 
   useEffect(() => {
     const p = projects.find(p => p.id === activeProjectId);
     if (p) {
       const updatedP = {
           ...p,
-          streams: p.streams || [createNewStream('Imported Sequence')]
+          streams: p.streams && p.streams.length > 0 ? p.streams : getInitialStreams()
       };
       reset(updatedP);
       setVideoSrc(null);
       setVideoFile(null);
     }
-  }, [activeProjectId, reset, createNewStream]);
+  }, [activeProjectId, reset, getInitialStreams]);
 
   useEffect(() => {
     if (!project.id) return;
@@ -111,7 +120,7 @@ const App: React.FC = () => {
   const videoRef = useRef<VideoPlayerHandle>(null);
 
   const handleNewProject = () => {
-    const newProj = { ...initialProject, id: `proj_${Date.now()}`, streams: [createNewStream('Primary Sequence')] };
+    const newProj = { ...initialProject, id: `proj_${Date.now()}`, streams: getInitialStreams() };
     setActiveProjectId(newProj.id);
     reset(newProj);
     setVideoSrc(null);
@@ -150,9 +159,9 @@ const App: React.FC = () => {
   };
 
   const handleAddStream = (index: number) => {
-    // 移除 prompt，避免拦截。用户可以后续在 Settings 里重命名
     const streamName = `New Stream ${project.streams.length + 1}`;
-    const newStream = createNewStream(streamName);
+    // 新增流时，默认使用配置里的第一组编码
+    const newStream = createNewStream(streamName, DEFAULT_STREAMS_CONFIG[0].codes);
     setProject(prev => {
       const currentStreams = prev.streams || [];
       const newStreams = [...currentStreams];
