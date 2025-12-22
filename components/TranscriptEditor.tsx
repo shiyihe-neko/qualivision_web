@@ -60,6 +60,13 @@ const SafeEditableCell = ({ html, isNoteMode, activeNoteColor, onSave }: SafeEdi
     }
   };
 
+  // 核心修复：强制粘贴为纯文本，防止样式污染
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+  };
+
   return (
     <div
       ref={contentRef}
@@ -70,6 +77,7 @@ const SafeEditableCell = ({ html, isNoteMode, activeNoteColor, onSave }: SafeEdi
       onBlur={handleBlur}
       onFocus={handleFocus}
       onKeyDown={handleKeyDown}
+      onPaste={handlePaste}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
@@ -183,10 +191,8 @@ interface TranscriptEditorProps {
   notePalette: NoteDefinition[];
   currentTime: number;
   onSeek: (time: number) => void;
-  // UPDATED SIGNATURE to allow functional updates
   onUpdateSubtitles: (subs: Subtitle[] | ((prev: Subtitle[]) => Subtitle[])) => void;
   onOpenCodeManager: () => void;
-  // Added properties to resolve TypeScript error in App.tsx
   isVideoLoaded?: boolean;
   isAIProcessing?: boolean;
   onAutoTranscribe?: () => void;
@@ -213,10 +219,6 @@ const TranscriptEditor: React.FC<TranscriptEditorProps> = ({
       setActiveNoteColor(notePalette[0].color);
     }
   }, [notePalette, activeNoteColor]);
-
-  // --- STABLE CALLBACKS USING FUNCTIONAL UPDATES ---
-  // Using functional updates ensures we never use stale 'subtitles' prop from a closure.
-  // This fixes the race condition between onBlur (saving text) and onClick (adding rows).
 
   const updateLine = useCallback((id: string, updates: Partial<Subtitle>) => {
     onUpdateSubtitles((currentSubs) => 
@@ -308,14 +310,12 @@ const TranscriptEditor: React.FC<TranscriptEditorProps> = ({
 
   return (
     <div className="h-full flex flex-col bg-slate-900 border-l border-slate-800">
-      {/* Header Actions */}
       <div className="p-3 border-b border-slate-800 bg-slate-900 sticky top-0 z-20 flex flex-col gap-2 shadow-sm">
         <div className="flex justify-between items-center">
             <h2 className="text-sm font-semibold text-white flex items-center gap-2">
                 <Clock className="w-4 h-4 text-emerald-400" /> Transcript
             </h2>
             <div className="flex gap-2">
-                {/* AI Transcription Button */}
                 {onAutoTranscribe && (
                   <button 
                     onClick={onAutoTranscribe} 
@@ -337,7 +337,6 @@ const TranscriptEditor: React.FC<TranscriptEditorProps> = ({
             </div>
         </div>
 
-        {/* Note Mode Controls */}
         <div className="flex items-center gap-2 bg-slate-800/50 p-1.5 rounded-lg border border-slate-700">
            <button 
               onClick={() => setIsNoteMode(!isNoteMode)}
@@ -379,7 +378,6 @@ const TranscriptEditor: React.FC<TranscriptEditorProps> = ({
         </div>
       </div>
       
-      {/* List (STATIC) */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {subtitles.length === 0 && (
             <div className="text-center py-10">
