@@ -12,13 +12,70 @@ const formatTime = (seconds: number) => {
 };
 
 const parseTime = (timeStr: string): number | null => {
-  const parts = timeStr.trim().split(':');
+  const clean = timeStr.trim();
+  // 匹配 mm:ss 或 hh:mm:ss
+  const parts = clean.split(':');
   if (parts.length === 2) {
     const m = parseInt(parts[0], 10);
     const s = parseInt(parts[1], 10);
     if (!isNaN(m) && !isNaN(s)) return m * 60 + s;
+  } else if (parts.length === 3) {
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const s = parseInt(parts[2], 10);
+    if (!isNaN(h) && !isNaN(m) && !isNaN(s)) return h * 3600 + m * 60 + s;
   }
   return null;
+};
+
+// --- SMART TEXT PARSER ---
+const parseTranscriptText = (text: string, defaultInterval: number): Subtitle[] => {
+    const lines = text.split('\n');
+    const result: Subtitle[] = [];
+    let currentStartTime: number | null = null;
+    let fallbackTime = 0;
+
+    // 正则表达式匹配时间戳，例如 [00:12], 0:05, 00:00:10 等
+    const timeRegex = /(?:\[)?(\d{1,2}:\d{2}(?::\d{2})?)(?:\])?/;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+
+        const timeMatch = line.match(timeRegex);
+        if (timeMatch) {
+            const parsed = parseTime(timeMatch[1]);
+            if (parsed !== null) {
+                currentStartTime = parsed;
+                // 如果这一行仅仅包含时间戳，我们寻找下一行作为内容
+                const remainingContent = line.replace(timeMatch[0], '').trim();
+                if (remainingContent) {
+                    result.push({
+                        id: `sub_${Date.now()}_${i}`,
+                        startTime: currentStartTime,
+                        endTime: currentStartTime + defaultInterval,
+                        html: remainingContent
+                    });
+                    currentStartTime = null; // 重置
+                }
+                continue;
+            }
+        }
+
+        // 如果走到了这里，说明这一行是文本内容
+        const startTime = currentStartTime !== null ? currentStartTime : fallbackTime;
+        result.push({
+            id: `sub_${Date.now()}_${i}`,
+            startTime: startTime,
+            endTime: startTime + defaultInterval,
+            html: line
+        });
+
+        // 更新 fallback 指针
+        fallbackTime = startTime + defaultInterval;
+        currentStartTime = null; // 消耗掉手动指定的时间戳
+    }
+    return result;
 };
 
 // --- SAFE EDITABLE CELL ---
@@ -60,7 +117,6 @@ const SafeEditableCell = ({ html, isNoteMode, activeNoteColor, onSave }: SafeEdi
     }
   };
 
-  // 核心修复：强制粘贴为纯文本，防止样式污染
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
     const text = e.clipboardData.getData('text/plain');
@@ -110,7 +166,6 @@ const SubtitleRow = memo(({
         borderLeftWidth: '4px',
       }}
     >
-      {/* Top Row: Time & Controls */}
       <div className="flex items-center gap-2 mb-1">
           <input 
             type="text"
@@ -166,7 +221,6 @@ const SubtitleRow = memo(({
           </div>
       </div>
       
-      {/* Safe Editable Cell */}
       <SafeEditableCell 
         html={sub.html} 
         isNoteMode={isNoteMode} 
@@ -183,7 +237,6 @@ const SubtitleRow = memo(({
     prev.transcriptCodes === next.transcriptCodes
   );
 });
-
 
 interface TranscriptEditorProps {
   subtitles: Subtitle[];
@@ -256,7 +309,7 @@ const TranscriptEditor: React.FC<TranscriptEditorProps> = ({
   }, [onUpdateSubtitles]);
 
   const getCustomInterval = (): number => {
-    const input = prompt("Enter the time interval per line in seconds (e.g., 5 or 10):", "5");
+    const input = prompt("Enter the time interval per line in seconds (if timestamps are missing):", "5");
     if (input === null) return 5;
     const val = parseInt(input, 10);
     return isNaN(val) || val <= 0 ? 5 : val;
@@ -269,13 +322,7 @@ const TranscriptEditor: React.FC<TranscriptEditorProps> = ({
     const reader = new FileReader();
     reader.onload = (ev) => {
       const content = ev.target?.result as string;
-      const lines = content.split('\n').filter(l => l.trim().length > 0);
-      const newSubs = lines.map((line, idx) => ({
-        id: `sub_${Date.now()}_${idx}`,
-        startTime: idx * interval,
-        endTime: (idx + 1) * interval,
-        html: line 
-      }));
+      const newSubs = parseTranscriptText(content, interval);
 
       onUpdateSubtitles((currentSubs) => {
          if (currentSubs.length > 0 && !confirm("Append to existing transcript? (Cancel to Replace)")) {
@@ -289,16 +336,10 @@ const TranscriptEditor: React.FC<TranscriptEditorProps> = ({
   };
 
   const handlePasteImport = () => {
-      const text = prompt("Paste your transcript text here:");
+      const text = prompt("Paste your transcript text here (Time marks like 00:12 will be extracted):");
       if (!text) return;
       const interval = getCustomInterval();
-      const lines = text.split('\n').filter(l => l.trim().length > 0);
-      const newSubs = lines.map((line, idx) => ({
-        id: `sub_${Date.now()}_${idx}`,
-        startTime: idx * interval,
-        endTime: (idx + 1) * interval,
-        html: line
-      }));
+      const newSubs = parseTranscriptText(text, interval);
 
       onUpdateSubtitles((currentSubs) => {
          if (currentSubs.length > 0 && !confirm("Append to existing transcript? (Cancel to Replace)")) {

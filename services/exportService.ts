@@ -63,6 +63,17 @@ export const generateCsvContent = (project: Project, stream: TimelineStream): st
   return [headers.join(","), ...rows].join("\n");
 };
 
+export const generateTranscriptThemeCsvContent = (project: Project): string => {
+  const stats = getTranscriptStatsData(project);
+  const headers = ["ThemeName", "Occurrences", "Color"];
+  const rows = stats.map(s => [
+    `"${s.name}"`, 
+    s.count, 
+    `"${s.color}"`
+  ].join(","));
+  return [headers.join(","), ...rows].join("\n");
+};
+
 export const generateHtmlContent = (project: Project): string => {
   const effectiveDuration = calculateEffectiveDuration(project);
   const transcriptStats = getTranscriptStatsData(project);
@@ -291,6 +302,11 @@ export const saveProjectPackage = async (project: Project, videoFile: File | nul
       await wHtml.write(generateHtmlContent(project));
       await wHtml.close();
 
+      const themeCsvHandle = await projectDir.getFileHandle(`transcript_themes_summary.csv`, { create: true });
+      const wThemeCsv = await themeCsvHandle.createWritable();
+      await wThemeCsv.write(generateTranscriptThemeCsvContent(project));
+      await wThemeCsv.close();
+
       for (const stream of project.streams) {
         const streamSafeName = stream.name.replace(/\s+/g, '_').toLowerCase();
         
@@ -325,5 +341,7 @@ export const saveProjectPackage = async (project: Project, videoFile: File | nul
   }
 
   downloadFile(`${safeName}_report.html`, generateHtmlContent(project), 'text/html');
+  // 同样下载主题统计 CSV
+  downloadFile(`${safeName}_transcript_themes.csv`, generateTranscriptThemeCsvContent(project), 'text/csv');
   return true;
 };
