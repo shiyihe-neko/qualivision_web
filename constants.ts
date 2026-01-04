@@ -3,32 +3,21 @@ import { CodeDefinition, NoteDefinition } from './types';
 
 // --- sequential coding 1: Behavioral
 export const BEHAVIOR_CODES: CodeDefinition[] = [
-  { id: 'b1', label: 'Explore_design', color: '#E53935', shortcut: '1' },
-  { id: 'b2', label: 'Stuck_unmet_design', color: '#FB8C00', shortcut: '3' },
-  { id: 'b3', label: 'Explore_function', color: '#ec4899', shortcut: '2' },
-  { id: 'b4', label: 'Stuck_unexp_func', color: '#FDD835', shortcut: '4' },
-  { id: 'b5', label: 'Stuck_complex_func', color: '#C2B48A', shortcut: '5' },
-  { id: 'b6', label: 'Vibe_finetuning', color: '#43A047', shortcut: '6' },
-  { id: 'b7', label: 'Vibe_evaluation', color: '#1E88E5', shortcut: '7' },
-  { id: 'b8', label: 'Vibe_reframing', color: '#8E24AA', shortcut: '8' },
-  { id: 'b9', label: 'Para_finetuning', color: '#8FA39A', shortcut: '9' },
-  { id: 'b10', label: 'Para_evaluation', color: '#8FA0B2', shortcut: '0' },
-  { id: 'b11', label: 'Para_reframing', color: '#9A8FA3', shortcut: '-' },
+  { id: 'b1', label: 'Explore', color: '#f3a3dfff', shortcut: '1' },
+  { id: 'b2', label: 'Stuck', color: '#f17d3fff', shortcut: '3' },
+  { id: 'b3', label: 'Finetune', color: '#60ff66ff', shortcut: '2' },
+  { id: 'b4', label: 'Evaluate', color: '#35b4fdff', shortcut: '4' },
+  { id: 'b5', label: 'Reframe', color: '#a91addff', shortcut: '5' },
 ];
 
 // --- sequential coding 2: tool triggered activities ---
 export const TOOL_CODES: CodeDefinition[] = [
-  { id: 'e1', label: 'EL_Preview', color: '#E53935', shortcut: 'q' },
-  { id: 'e2', label: 'EL_Testing', color: '#fb98daff', shortcut: 'w' },
-  { id: 'e3', label: 'Selective_Control', color: '#FDD835', shortcut: 'e' },
-  { id: 'e4', label: 'FT_Slider', color: '#43A047', shortcut: 'r' },
-  { id: 'e5', label: 'FT_Wheels', color: '#1E88E5', shortcut: 't' },
-  { id: 'e6', label: 'FT_Colorpicker', color: '#8E24AA', shortcut: 'y' },
-  { id: 'e7', label: 'FT_Colorspace', color: '#ec4899', shortcut: 'u' },
-  { id: 'e8', label: 'FT_Order', color: '#f97316', shortcut: 'i' },
-  { id: 'e9', label: 'Hacking', color: '#7ba592ff', shortcut: 'i' },
-  { id: 'e10', label: 'Regenerate_same', color: '#7896b6ff', shortcut: 'o' },
-  { id: 'e11', label: 'Regenerate_diff', color: '#b3a67fff', shortcut: 'p' },
+  { id: 'e1', label: 'Linter_check', color: '#ff0804ff', shortcut: 'q' },
+  { id: 'e2', label: 'Preview_check', color: '#f17d3fff', shortcut: 'w' },
+  { id: 'e3', label: 'Finetune_intuition', color: '#FDD835', shortcut: 'e' },
+  { id: 'e4', label: 'Finetune_linter', color: '#60ff66ff', shortcut: 'r' },
+  { id: 'e5', label: 'Shift_strategy', color: '#35b4fdff', shortcut: 't' },
+  { id: 'e6', label: 'Hacking', color: '#a91addff', shortcut: 'y' },
 ];
 
 // --- sequential coding 3:  ---
@@ -48,16 +37,11 @@ export const DEFAULT_TIMELINE_CODES = BEHAVIOR_CODES;
 
 // transcripts code - cognitive actions and evaluation method
 export const DEFAULT_TRANSCRIPT_CODES: CodeDefinition[] = [
-  { id: 'tr1', label: 'Probing', color: '#E53935', shortcut: '' }, 
-  { id: 'tr2', label: 'Hypothesis_Testing', color: '#9f6867ff', shortcut: '' }, 
-  { id: 'tr3', label: 'Intuition', color: '#6366f1', shortcut: '' },
-  { id: 'tr4', label: 'Perceptual_Checking', color: '#1E88E5', shortcut: '' },
-  { id: 'tr5', label: 'Strategy_Shift', color: '#43A047', shortcut: '' },
-  { id: 'tr6', label: 'Holistic_Judgment', color: '#fbbf24', shortcut: '' },
-  { id: 'tr7', label: 'Pairwise_Comparison', color: '#8E24AA', shortcut: '' },
-  { id: 'tr8', label: 'Sequential_Scanning', color: '#f97316', shortcut: '' },
-  { id: 'tr9', label: 'Preview_Evaluation', color: '#ec4899', shortcut: '' },
-  { id: 'tr10', label: 'Check_Evaluation', color: '#fb98daff', shortcut: '' },
+  { id: 'tr1', label: 'Probing_intuition', color: '#f3a3dfff', shortcut: '' }, 
+  { id: 'tr2', label: 'Probing_exploration', color: '#f17d3fff', shortcut: '' }, 
+  { id: 'tr3', label: 'Evaluation_holistic', color: '#60ff66ff', shortcut: '' },
+  { id: 'tr4', label: 'Perceptual_checking', color: '#35b4fdff', shortcut: '' },
+  { id: 'tr5', label: 'Strategy_shift', color: '#a91addff', shortcut: '' },
 ];
 
 // notes code
