@@ -16,8 +16,9 @@ export const TOOL_CODES: CodeDefinition[] = [
   { id: 'e2', label: 'Preview_check', color: '#f17d3fff', shortcut: 'w' },
   { id: 'e3', label: 'Finetune_intuition', color: '#FDD835', shortcut: 'e' },
   { id: 'e4', label: 'Finetune_linter', color: '#60ff66ff', shortcut: 'r' },
-  { id: 'e5', label: 'Shift_strategy', color: '#35b4fdff', shortcut: 't' },
+  { id: 'e5', label: 'Auto_palette', color: '#35b4fdff', shortcut: 't' },
   { id: 'e6', label: 'Hacking', color: '#a91addff', shortcut: 'y' },
+  { id: 'e7', label: 'Add_color', color: '#ec4899', shortcut: 'z' },
 ];
 
 // --- sequential coding 3:  ---
