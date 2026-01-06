@@ -11,26 +11,31 @@ export const BEHAVIOR_CODES: CodeDefinition[] = [
 ];
 
 // --- sequential coding 2: tool triggered activities ---
-export const TOOL_CODES: CodeDefinition[] = [
-  { id: 'e1', label: 'Linter_check', color: '#ff0804ff', shortcut: 'q' },
-  { id: 'e2', label: 'Preview_check', color: '#f17d3fff', shortcut: 'w' },
-  { id: 'e3', label: 'Finetune_intuition', color: '#FDD835', shortcut: 'e' },
-  { id: 'e4', label: 'Finetune_linter', color: '#60ff66ff', shortcut: 'r' },
-  { id: 'e5', label: 'Auto_palette', color: '#35b4fdff', shortcut: 't' },
-  { id: 'e6', label: 'Hacking', color: '#a91addff', shortcut: 'y' },
-  { id: 'e7', label: 'Add_color', color: '#ec4899', shortcut: 'z' },
+export const TOOL_CODES_COLORBUDDY: CodeDefinition[] = [
+  { id: 'e1', label: 'Linter_check', color: '#ff0804ff', shortcut: 'g' },
+  { id: 'e2', label: 'Preview_check', color: '#f17d3fff', shortcut: 'h' },
+  { id: 'e3', label: 'Simulate_check', color: '#FDD835', shortcut: 'i' },
+  { id: 'e4', label: 'Finetune_intuition', color: '#4a67f7ff', shortcut: 'j' },
+  { id: 'e5', label: 'Finetune_linter', color: '#302660ff', shortcut: 'k' },
+  { id: 'e6', label: 'Auto_palette', color: '#35b4fdff', shortcut: 'l' },
+  { id: 'e7', label: 'Hacking', color: '#a91addff', shortcut: 'm' },
+  { id: 'e8', label: 'Add_color', color: '#ec4899', shortcut: 'n' },
 ];
 
 // --- sequential coding 3:  ---
-export const INTERACTION_CODES: CodeDefinition[] = [
-  { id: 'i1', label: 'Screen', color: '#8b5cf6', shortcut: 'a' },
-  { id: 'i2', label: 'Paper', color: '#ec4899', shortcut: 's' },
-  { id: 'i3', label: 'Person', color: '#f97316', shortcut: 'd' },
+
+export const TOOL_CODES: CodeDefinition[] = [
+  { id: 'e1', label: 'Simulate_check', color: '#ff0804ff', shortcut: 'a' },
+  { id: 'e2', label: 'Preview_check', color: '#f17d3fff', shortcut: 'b' },
+  { id: 'e3', label: 'Finetune_intuition', color: '#FDD835', shortcut: 'c' },
+  { id: 'e4', label: 'Auto_palette', color: '#35b4fdff', shortcut: 'd' },
+  { id: 'e5', label: 'Hacking', color: '#a91addff', shortcut: 'e' },
+  { id: 'e6', label: 'Add_color', color: '#ec4899', shortcut: 'f' },
 ];
-
-
+  
 export const DEFAULT_STREAMS_CONFIG = [
   { name: 'Behavioral Stream', codes: BEHAVIOR_CODES },
+  { name: 'Tool triggered Activities Color Buddy', codes: TOOL_CODES_COLORBUDDY },
   { name: 'Tool triggered Activities', codes: TOOL_CODES },
 ];
 
