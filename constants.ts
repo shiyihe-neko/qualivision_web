@@ -1,42 +1,29 @@
 
 import { CodeDefinition, NoteDefinition } from './types';
 
-// --- sequential coding 1: Behavioral
+
 export const BEHAVIOR_CODES: CodeDefinition[] = [
-  { id: 'b1', label: 'Explore', color: '#f3a3dfff', shortcut: '1' },
-  { id: 'b2', label: 'Stuck', color: '#f17d3fff', shortcut: '3' },
-  { id: 'b3', label: 'Finetune', color: '#60ff66ff', shortcut: '2' },
-  { id: 'b4', label: 'Evaluate', color: '#35b4fdff', shortcut: '4' },
-  { id: 'b5', label: 'Reframe', color: '#a91addff', shortcut: '5' },
+  { id: 'b1', label: 'UI_Explore', color: '#f42c2cff', shortcut: '1' },
+  { id: 'b2', label: 'Stuck', color: '#ff6411ff', shortcut: '2' },
+  { id: 'b3', label: 'Hacking', color: '#046408ff', shortcut: '3' },
+  { id: 'b4', label: 'Fine_Tune', color: '#1902b2ff', shortcut: '4' },
+  { id: 'b5', label: 'Rough_Tune', color: '#35b4fdff', shortcut: '5' },
+  { id: 'b6', label: 'Reframe', color: '#a007d7ff', shortcut: '6' },
+  { id: 'b7', label: 'Visual_Eva', color: '#ec4899', shortcut: '7' },
+  { id: 'b8', label: 'Simul_Eva', color: '#e6f564ff', shortcut: '8' },
+  { id: 'b9', label: 'Linter_Eva', color: '#62fdc5ff', shortcut: '9' },
 ];
 
-// --- sequential coding 2: tool triggered activities ---
-export const TOOL_CODES_COLORBUDDY: CodeDefinition[] = [
-  { id: 'e1', label: 'Linter_check', color: '#ff0804ff', shortcut: 'g' },
-  { id: 'e2', label: 'Preview_check', color: '#f17d3fff', shortcut: 'h' },
-  { id: 'e3', label: 'Simulate_check', color: '#FDD835', shortcut: 'i' },
-  { id: 'e4', label: 'Finetune_intuition', color: '#4a67f7ff', shortcut: 'j' },
-  { id: 'e5', label: 'Finetune_linter', color: '#302660ff', shortcut: 'k' },
-  { id: 'e6', label: 'Auto_palette', color: '#35b4fdff', shortcut: 'l' },
-  { id: 'e7', label: 'Hacking', color: '#a91addff', shortcut: 'm' },
-  { id: 'e8', label: 'Add_color', color: '#ec4899', shortcut: 'n' },
+export const THINKING_CODES: CodeDefinition[] = [
+  { id: 'e1', label: 'Aesthetic', color: '#ff0804ff', shortcut: 'W' },
+  { id: 'e2', label: 'A11y', color: '#3f48f1ff', shortcut: 'A' },
+  { id: 'e3', label: 'Constraints', color: '#FDD835', shortcut: 'S' },
 ];
 
-// --- sequential coding 3:  ---
 
-export const TOOL_CODES: CodeDefinition[] = [
-  { id: 'e1', label: 'Simulate_check', color: '#ff0804ff', shortcut: 'a' },
-  { id: 'e2', label: 'Preview_check', color: '#f17d3fff', shortcut: 'b' },
-  { id: 'e3', label: 'Finetune_intuition', color: '#FDD835', shortcut: 'c' },
-  { id: 'e4', label: 'Auto_palette', color: '#35b4fdff', shortcut: 'd' },
-  { id: 'e5', label: 'Hacking', color: '#a91addff', shortcut: 'e' },
-  { id: 'e6', label: 'Add_color', color: '#ec4899', shortcut: 'f' },
-];
-  
 export const DEFAULT_STREAMS_CONFIG = [
   { name: 'Behavioral Stream', codes: BEHAVIOR_CODES },
-  { name: 'Tool triggered Activities Color Buddy', codes: TOOL_CODES_COLORBUDDY },
-  { name: 'Tool triggered Activities', codes: TOOL_CODES },
+  { name: 'Thinking Stream', codes: THINKING_CODES },
 ];
 
 export const DEFAULT_TIMELINE_CODES = BEHAVIOR_CODES;
