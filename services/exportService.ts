@@ -177,10 +177,129 @@ export const generateTranscriptThemeCsvContent = (project: Project): string => {
   return [headers.join(","), ...rows].join("\n");
 };
 
+const getOrderedStreams = (project: Project) => {
+  const ordered: TimelineStream[] = [];
+  const visited = new Set<string>();
+  const append = (parentId?: string) => project.streams
+    .filter(stream => {
+      const normalizedParent = stream.parentId && project.streams.some(candidate => candidate.id === stream.parentId)
+        ? stream.parentId
+        : undefined;
+      return normalizedParent === parentId && !visited.has(stream.id);
+    })
+    .forEach(stream => {
+      visited.add(stream.id);
+      ordered.push(stream);
+      append(stream.id);
+    });
+  append();
+  project.streams.filter(stream => !visited.has(stream.id)).forEach(stream => ordered.push(stream));
+  return ordered;
+};
+
+const escapeHtml = (value: string) => value
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
+const reportPolarPoint = (radius: number, angle: number) => {
+  const radians = (angle - 90) * Math.PI / 180;
+  return { x: 300 + radius * Math.cos(radians), y: 300 + radius * Math.sin(radians) };
+};
+
+const reportRingArcPath = (innerRadius: number, outerRadius: number, startAngle: number, endAngle: number) => {
+  const safeEnd = Math.min(endAngle, startAngle + 359.999);
+  const outerStart = reportPolarPoint(outerRadius, startAngle);
+  const outerEnd = reportPolarPoint(outerRadius, safeEnd);
+  const innerEnd = reportPolarPoint(innerRadius, safeEnd);
+  const innerStart = reportPolarPoint(innerRadius, startAngle);
+  const largeArc = safeEnd - startAngle > 180 ? 1 : 0;
+  return `M ${outerStart.x} ${outerStart.y} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y} L ${innerEnd.x} ${innerEnd.y} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y} Z`;
+};
+
+export const generateHierarchyJson = (project: Project): string => JSON.stringify({
+  projectId: project.id,
+  projectName: project.name,
+  streams: getOrderedStreams(project).map(stream => ({
+    id: stream.id,
+    name: stream.name,
+    parentStreamId: stream.parentId || null,
+    codes: stream.codes.map(code => ({
+      id: code.id,
+      label: code.label,
+      color: code.color,
+      shortcut: code.shortcut || null,
+      parentCodeId: code.parentId || null
+    }))
+  }))
+}, null, 2);
+
+const generateSunburstReportHtml = (project: Project, effectiveDuration: number) => {
+  const orderedStreams = getOrderedStreams(project);
+  const ringStep = Math.min(42, 185 / Math.max(orderedStreams.length, 1));
+  const rings = orderedStreams.map((stream, streamIndex) => {
+    const innerRadius = 85 + streamIndex * ringStep;
+    const ringWidth = Math.max(1.5, ringStep - Math.min(6, ringStep * 0.2));
+    const outerRadius = innerRadius + ringWidth;
+    const segments = project.segments.filter(segment => segment.streamId === stream.id).map(segment => {
+      const code = stream.codes.find(item => item.id === segment.codeId);
+      if (!code || effectiveDuration <= 0) return '';
+      const startAngle = Math.max(0, segment.startTime / effectiveDuration * 360);
+      const endAngle = Math.min(360, segment.endTime / effectiveDuration * 360);
+      if (endAngle <= startAngle) return '';
+      return `<path d="${reportRingArcPath(innerRadius, outerRadius, startAngle, endAngle)}" fill="${escapeHtml(code.color)}" stroke="#ffffff" stroke-width="0.8"><title>${escapeHtml(stream.name)} · ${escapeHtml(code.label)}: ${segment.startTime.toFixed(2)}s–${segment.endTime.toFixed(2)}s</title></path>`;
+    }).join('');
+    return `<g><circle cx="300" cy="300" r="${(innerRadius + outerRadius) / 2}" fill="none" stroke="#e2e8f0" stroke-width="${ringWidth}"/>${segments}</g>`;
+  }).join('');
+  const legend = orderedStreams.map((stream, index) => `
+    <div class="border-b border-slate-100 pb-3 mb-3">
+      <div class="font-black text-sm text-slate-700 mb-2">Ring ${index + 1}: ${escapeHtml(stream.name)}${stream.parentId ? ' <span class="text-blue-500">↳ child stream</span>' : ''}</div>
+      <div class="flex flex-wrap gap-3">${stream.codes.map(code => `<span class="text-[10px] text-slate-500"><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${escapeHtml(code.color)};margin-right:4px"></i>${escapeHtml(code.label)}</span>`).join('')}</div>
+    </div>`).join('');
+  return `<section class="mt-16 mb-20 bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+    <h2 class="text-2xl font-black text-slate-800 mb-2">Time-aligned Multi-stream Sunburst</h2>
+    <p class="text-sm text-slate-500 mb-8">All rings share the same clockwise timeline, starting at 12 o'clock. One ring is generated for every actual stream.</p>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+      <svg viewBox="0 0 600 600" style="width:100%;max-width:620px" role="img" aria-label="Time-aligned multi-stream sunburst">${rings}<circle cx="300" cy="300" r="72" fill="#f8fafc" stroke="#cbd5e1"/><text x="300" y="294" text-anchor="middle" fill="#0f172a" font-size="18" font-weight="700">${effectiveDuration.toFixed(1)}s</text><text x="300" y="316" text-anchor="middle" fill="#64748b" font-size="11">clockwise timeline</text></svg>
+      <div>${legend || '<p class="text-slate-400">No streams defined.</p>'}</div>
+    </div>
+  </section>`;
+};
+
+const generateHierarchyReportHtml = (project: Project) => {
+  const renderCodes = (stream: TimelineStream, parentId?: string, visited = new Set<string>()): string => stream.codes
+    .filter(code => {
+      const normalizedParent = code.parentId && stream.codes.some(candidate => candidate.id === code.parentId) ? code.parentId : undefined;
+      return normalizedParent === parentId && !visited.has(code.id);
+    })
+    .map(code => {
+      const nextVisited = new Set(visited).add(code.id);
+      const codeSegments = project.segments.filter(segment => segment.streamId === stream.id && segment.codeId === code.id).sort((a, b) => a.startTime - b.startTime);
+      const times = codeSegments.map((segment, index) => `${index ? '<span class="text-slate-300 mx-1">→</span>' : ''}<span class="font-mono text-[10px] bg-slate-50 border border-slate-200 rounded px-2 py-1" title="${escapeHtml(segment.note || '')}">${segment.startTime.toFixed(2)}s–${segment.endTime.toFixed(2)}s</span>`).join('');
+      const children = renderCodes(stream, code.id, nextVisited);
+      return `<li class="ml-5 border-l-2 border-slate-200 pl-4 py-2"><div><i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${escapeHtml(code.color)};margin-right:7px"></i><strong>${escapeHtml(code.label)}</strong> <span class="text-[10px] text-slate-400">${codeSegments.length} segments</span></div>${times ? `<div class="ml-5 mt-2 flex flex-wrap items-center gap-1">${times}</div>` : ''}${children ? `<ul>${children}</ul>` : ''}</li>`;
+    }).join('');
+  const renderStreams = (parentId?: string, visited = new Set<string>()): string => project.streams
+    .filter(stream => {
+      const normalizedParent = stream.parentId && project.streams.some(candidate => candidate.id === stream.parentId) ? stream.parentId : undefined;
+      return normalizedParent === parentId && !visited.has(stream.id);
+    })
+    .map(stream => {
+      const nextVisited = new Set(visited).add(stream.id);
+      const childStreams = renderStreams(stream.id, nextVisited);
+      return `<li class="ml-5 border-l-4 border-blue-100 pl-5 py-4"><div class="flex items-center gap-2 mb-2"><span class="bg-blue-600 text-white text-[9px] font-black px-2 py-1 rounded-full">${stream.parentId ? 'CHILD STREAM' : 'STREAM'}</span><strong class="text-slate-800">${escapeHtml(stream.name)}</strong></div><ul>${renderCodes(stream) || '<li class="text-sm text-slate-400 ml-5">No codes defined.</li>'}</ul>${childStreams ? `<ul class="mt-2">${childStreams}</ul>` : ''}</li>`;
+    }).join('');
+  return `<section class="mt-16 mb-20 bg-white p-8 rounded-3xl shadow-sm border border-slate-100"><h2 class="text-2xl font-black text-slate-800 mb-2">Stream &amp; Code Hierarchy and Evolution</h2><p class="text-sm text-slate-500 mb-6">Parent/child streams and codes, with annotated intervals ordered from left to right by time.</p><ul>${renderStreams() || '<li class="text-slate-400">No hierarchy data.</li>'}</ul></section>`;
+};
+
 export const generateHtmlContent = (project: Project): string => {
   const effectiveDuration = calculateEffectiveDuration(project);
   const transcriptStats = getTranscriptStatsData(project);
   const chartConfigs: any[] = [];
+  const sunburstSection = generateSunburstReportHtml(project, effectiveDuration);
+  const hierarchySection = generateHierarchyReportHtml(project);
   
   const streamSections = project.streams.map((stream, idx) => {
     const streamSegments = project.segments.filter(s => s.streamId === stream.id);
@@ -270,6 +389,10 @@ export const generateHtmlContent = (project: Project): string => {
       </header>
 
       ${streamSections}
+
+      ${sunburstSection}
+
+      ${hierarchySection}
 
       <section class="grid grid-cols-1 lg:grid-cols-3 gap-10 mt-16 mb-20">
         <div class="lg:col-span-1">
@@ -500,15 +623,21 @@ export const saveProjectPackage = async (project: Project, videoFile: File | nul
       await wRawJson.write(generateRawAnnotationsJson(project));
       await wRawJson.close();
 
-      for (const stream of project.streams) {
+      const hierarchyHandle = await projectDir.getFileHandle(`hierarchy.json`, { create: true });
+      const wHierarchy = await hierarchyHandle.createWritable();
+      await wHierarchy.write(generateHierarchyJson(project));
+      await wHierarchy.close();
+
+      for (const [streamIndex, stream] of project.streams.entries()) {
         const streamSafeName = stream.name.replace(/\s+/g, '_').toLowerCase();
+        const sequenceBaseName = `sequence_${streamIndex + 1}_${streamSafeName}`;
         
-        const csvHandle = await projectDir.getFileHandle(`sequence_${streamSafeName}.csv`, { create: true });
+        const csvHandle = await projectDir.getFileHandle(`${sequenceBaseName}.csv`, { create: true });
         const wCsv = await csvHandle.createWritable();
         await wCsv.write(generateCsvContent(project, stream));
         await wCsv.close();
 
-        const jsonHandle = await projectDir.getFileHandle(`sequence_${streamSafeName}.json`, { create: true });
+        const jsonHandle = await projectDir.getFileHandle(`${sequenceBaseName}.json`, { create: true });
         const wJson = await jsonHandle.createWritable();
         await wJson.write(generateSequenceJson(project, stream));
         await wJson.close();
@@ -538,11 +667,13 @@ export const saveProjectPackage = async (project: Project, videoFile: File | nul
     { name: 'transcript_themes_summary.csv', content: generateTranscriptThemeCsvContent(project) },
     { name: 'raw_annotations.csv', content: generateRawAnnotationsCsv(project) },
     { name: 'raw_annotations.json', content: generateRawAnnotationsJson(project) },
-    ...project.streams.flatMap(stream => {
+    { name: 'hierarchy.json', content: generateHierarchyJson(project) },
+    ...project.streams.flatMap((stream, streamIndex) => {
       const streamSafeName = stream.name.replace(/[^a-z0-9\u4e00-\u9fa5]/gi, '_').toLowerCase();
+      const sequenceBaseName = `sequence_${streamIndex + 1}_${streamSafeName}`;
       return [
-        { name: `sequence_${streamSafeName}.csv`, content: generateCsvContent(project, stream) },
-        { name: `sequence_${streamSafeName}.json`, content: generateSequenceJson(project, stream) }
+        { name: `${sequenceBaseName}.csv`, content: generateCsvContent(project, stream) },
+        { name: `${sequenceBaseName}.json`, content: generateSequenceJson(project, stream) }
       ];
     }),
     { name: 'full_project_backup.json', content: JSON.stringify(project, null, 2) }
