@@ -20,8 +20,22 @@ interface TimelineCoderProps {
   isPlaying: boolean;
   onTogglePlay: () => void;
   onOpenCodeManager: () => void;
-  onAddStream: (index: number) => void;
+  onAddStream: (index: number, parentId?: string) => void;
 }
+
+const getStreamDepth = (stream: TimelineStream, streams: TimelineStream[]) => {
+  let depth = 0;
+  let parentId = stream.parentId;
+  const visited = new Set<string>([stream.id]);
+  while (parentId && !visited.has(parentId)) {
+    const parent = streams.find(item => item.id === parentId);
+    if (!parent) break;
+    visited.add(parent.id);
+    depth += 1;
+    parentId = parent.parentId;
+  }
+  return depth;
+};
 
 const TimelineCoder: React.FC<TimelineCoderProps> = ({
   duration,
@@ -136,7 +150,7 @@ const TimelineCoder: React.FC<TimelineCoderProps> = ({
   const deleteStream = (streamId: string) => {
     if (streams.length <= 1) return alert("Must have at least one stream.");
     if (confirm("Delete this entire stream and all its coded data?")) {
-      onUpdateStreams(streams.filter(s => s.id !== streamId));
+      onUpdateStreams(streams.filter(s => s.id !== streamId).map(s => s.parentId === streamId ? { ...s, parentId: undefined } : s));
       setActiveCodings(prev => {
         const next = { ...prev };
         delete next[streamId];
@@ -185,7 +199,9 @@ const TimelineCoder: React.FC<TimelineCoderProps> = ({
             <div key={stream.id} className="flex flex-col gap-2 group/stream relative">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-800 px-2 py-1 rounded">Stream {idx + 1}: {stream.name}</span>
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest bg-slate-800 px-2 py-1 rounded" style={{ marginLeft: `${getStreamDepth(stream, streams) * 20}px` }}>
+                    {stream.parentId ? 'Child Stream' : `Stream ${idx + 1}`}: {stream.name}
+                  </span>
                   {stream.isLocked ? (
                     <span className="flex items-center gap-1 text-[10px] text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20"><Lock className="w-3 h-3"/> Locked</span>
                   ) : (
@@ -194,6 +210,14 @@ const TimelineCoder: React.FC<TimelineCoderProps> = ({
                 </div>
                 
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onAddStream(idx + 1, stream.id)}
+                    className="px-2.5 py-1.5 text-[10px] font-bold text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-lg hover:bg-blue-600 hover:text-white transition-colors"
+                    title={`Add a child stream under ${stream.name}`}
+                  >
+                    + Child Stream
+                  </button>
                   <div className="flex gap-1 flex-wrap justify-end">
                     {stream.codes.map(code => (
                       <button

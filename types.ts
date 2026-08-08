@@ -12,6 +12,7 @@ export interface CodeDefinition {
   label: string;
   color: string;
   shortcut?: string;
+  parentId?: string; // Optional parent code for hierarchical analysis
 }
 
 export interface NoteDefinition {
@@ -33,6 +34,7 @@ export interface TimelineStream {
   id: string;
   name: string;
   isLocked: boolean;
+  parentId?: string; // Optional parent stream for nested analysis layers
   codes: CodeDefinition[]; // 每条流独立的编码组
 }
 

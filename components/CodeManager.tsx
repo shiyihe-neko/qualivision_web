@@ -30,13 +30,24 @@ const CodeManager: React.FC<CodeManagerProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<string>(streams[0]?.id || 'transcript');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{id?: string, label?: string, color?: string, shortcut?: string}>({});
+  const [editForm, setEditForm] = useState<{id?: string, label?: string, color?: string, shortcut?: string, parentId?: string}>({});
 
   const getCurrentList = () => {
     const stream = streams.find(s => s.id === activeTab);
     if (stream) return stream.codes;
     if (activeTab === 'transcript') return transcriptCodes;
     return notePalette;
+  };
+
+  const getDescendantIds = (id: string, codes: CodeDefinition[]) => {
+    const descendants = new Set<string>();
+    const visit = (parentId: string) => codes.filter(code => code.parentId === parentId).forEach(code => {
+      if (descendants.has(code.id)) return;
+      descendants.add(code.id);
+      visit(code.id);
+    });
+    visit(id);
+    return descendants;
   };
 
   const handleEdit = (item: any) => {
@@ -49,8 +60,10 @@ const CodeManager: React.FC<CodeManagerProps> = ({
 
     const streamIdx = streams.findIndex(s => s.id === activeTab);
     if (streamIdx !== -1) {
-      const newStreams = [...streams];
-      newStreams[streamIdx].codes = newStreams[streamIdx].codes.map(c => c.id === editingId ? { ...c, ...editForm } as CodeDefinition : c);
+      const newStreams = streams.map((stream, index) => index === streamIdx ? {
+        ...stream,
+        codes: stream.codes.map(c => c.id === editingId ? { ...c, ...editForm, parentId: editForm.parentId || undefined } as CodeDefinition : c)
+      } : stream);
       onUpdateStreams(newStreams);
     } else if (activeTab === 'transcript') {
       onUpdateTranscriptCodes(transcriptCodes.map(c => c.id === editingId ? { ...c, ...editForm } as CodeDefinition : c));
@@ -64,8 +77,12 @@ const CodeManager: React.FC<CodeManagerProps> = ({
     if (!confirm('Delete this definition?')) return;
     const streamIdx = streams.findIndex(s => s.id === activeTab);
     if (streamIdx !== -1) {
-      const newStreams = [...streams];
-      newStreams[streamIdx].codes = newStreams[streamIdx].codes.filter(c => c.id !== id);
+      const newStreams = streams.map((stream, index) => index === streamIdx ? {
+        ...stream,
+        codes: stream.codes
+          .filter(c => c.id !== id)
+          .map(c => c.parentId === id ? { ...c, parentId: undefined } : c)
+      } : stream);
       onUpdateStreams(newStreams);
     } else if (activeTab === 'transcript') {
       onUpdateTranscriptCodes(transcriptCodes.filter(c => c.id !== id));
@@ -82,8 +99,7 @@ const CodeManager: React.FC<CodeManagerProps> = ({
     const streamIdx = streams.findIndex(s => s.id === activeTab);
     if (streamIdx !== -1) {
       const newCode: CodeDefinition = { id: newId, label: 'New Behavior', color: newColor, shortcut: String(list.length + 1) };
-      const newStreams = [...streams];
-      newStreams[streamIdx].codes = [...newStreams[streamIdx].codes, newCode];
+      const newStreams = streams.map((stream, index) => index === streamIdx ? { ...stream, codes: [...stream.codes, newCode] } : stream);
       onUpdateStreams(newStreams);
       handleEdit(newCode);
     } else if (activeTab === 'transcript') {
@@ -113,8 +129,8 @@ const CodeManager: React.FC<CodeManagerProps> = ({
           <aside className="w-56 border-r border-slate-800 p-4 space-y-1">
             <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-3 mb-2">Sequence Streams</div>
             {streams.map((s, i) => (
-              <button key={s.id} onClick={() => setActiveTab(s.id)} className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === s.id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800'}`}>
-                <ListTree className="w-4 h-4" /> {s.name || `Stream ${i+1}`}
+              <button key={s.id} onClick={() => setActiveTab(s.id)} style={{ paddingLeft: s.parentId ? '28px' : undefined }} className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all ${activeTab === s.id ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800'}`}>
+                <ListTree className="w-4 h-4" /> {s.parentId ? '↳ ' : ''}{s.name || `Stream ${i+1}`}
               </button>
             ))}
             <div className="h-px bg-slate-800 my-4" />
@@ -136,6 +152,19 @@ const CodeManager: React.FC<CodeManagerProps> = ({
                     <div className="flex-1 flex items-center gap-3 animate-in fade-in slide-in-from-left-2 duration-300">
                       <input type="color" value={editForm.color} onChange={e => setEditForm({...editForm, color: e.target.value})} className="w-10 h-10 rounded-lg cursor-pointer bg-transparent border-none"/>
                       <input type="text" value={editForm.label} onChange={e => setEditForm({...editForm, label: e.target.value})} className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500" placeholder="Label"/>
+                      {streams.some(stream => stream.id === activeTab) && (
+                        <select
+                          value={editForm.parentId || ''}
+                          onChange={e => setEditForm({...editForm, parentId: e.target.value || undefined})}
+                          className="w-40 bg-slate-950 border border-slate-700 rounded-lg px-2 py-2 text-xs text-slate-200 outline-none focus:border-blue-500"
+                          title="Optional parent code"
+                        >
+                          <option value="">Top level</option>
+                          {(getCurrentList() as CodeDefinition[]).filter(code => code.id !== editingId && !getDescendantIds(editingId || '', getCurrentList() as CodeDefinition[]).has(code.id)).map(code => (
+                            <option key={code.id} value={code.id}>{code.label}</option>
+                          ))}
+                        </select>
+                      )}
                       {activeTab.startsWith('stream') && (
                         <input type="text" value={editForm.shortcut || ''} onChange={e => setEditForm({...editForm, shortcut: e.target.value})} className="w-14 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-center font-mono" placeholder="Key" maxLength={1}/>
                       )}
@@ -146,6 +175,7 @@ const CodeManager: React.FC<CodeManagerProps> = ({
                       <div className="w-8 h-8 rounded-full border-2 border-white/10" style={{ backgroundColor: item.color }} />
                       <div className="flex-1">
                         <div className="font-bold text-slate-200">{item.label}</div>
+                        {item.parentId && <div className="text-[10px] text-blue-400">Child of {(getCurrentList() as CodeDefinition[]).find(code => code.id === item.parentId)?.label || 'Unknown'}</div>}
                         {item.shortcut && <div className="text-[10px] text-slate-500 font-mono tracking-tighter">Shortcut Key: {item.shortcut}</div>}
                       </div>
                       <div className="opacity-0 group-hover:opacity-100 flex gap-1 transition-opacity">

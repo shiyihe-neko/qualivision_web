@@ -34,6 +34,109 @@ const getTranscriptStatsData = (project: Project) => {
   })).filter(d => d.count > 0);
 };
 
+export interface RawAnnotationExportRow {
+  projectId: string;
+  projectName: string;
+  streamId: string;
+  streamName: string;
+  parentStreamId: string;
+  parentStreamName: string;
+  segmentId: string;
+  codeId: string;
+  label: string;
+  color: string;
+  parentCodeId: string;
+  parentLabel: string;
+  previousSegmentId: string;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  note: string;
+}
+
+const getRawAnnotationData = (project: Project): RawAnnotationExportRow[] => {
+  const streamOrder = new Map(project.streams.map((stream, index) => [stream.id, index]));
+
+  const rows = project.segments
+    .map(segment => {
+      const stream = project.streams.find(item => item.id === segment.streamId);
+      const parentStream = project.streams.find(item => item.id === stream?.parentId);
+      const code = stream?.codes.find(item => item.id === segment.codeId);
+      const parentCode = stream?.codes.find(item => item.id === code?.parentId);
+
+      return {
+        projectId: project.id,
+        projectName: project.name,
+        streamId: segment.streamId,
+        streamName: stream?.name || 'Unknown Stream',
+        parentStreamId: parentStream?.id || '',
+        parentStreamName: parentStream?.name || '',
+        segmentId: segment.id,
+        codeId: segment.codeId,
+        label: code?.label || 'Unknown',
+        color: code?.color || '',
+        parentCodeId: parentCode?.id || '',
+        parentLabel: parentCode?.label || '',
+        previousSegmentId: '',
+        startTime: segment.startTime,
+        endTime: segment.endTime,
+        duration: segment.endTime - segment.startTime,
+        note: segment.note || ''
+      };
+    })
+    .sort((a, b) =>
+      (streamOrder.get(a.streamId) ?? Number.MAX_SAFE_INTEGER) -
+        (streamOrder.get(b.streamId) ?? Number.MAX_SAFE_INTEGER) ||
+      a.startTime - b.startTime ||
+      a.endTime - b.endTime
+    );
+
+  const previousByStream = new Map<string, string>();
+  return rows.map(row => {
+    const result = { ...row, previousSegmentId: previousByStream.get(row.streamId) || '' };
+    previousByStream.set(row.streamId, row.segmentId);
+    return result;
+  });
+};
+
+const escapeCsvCell = (value: string | number) => {
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+export const generateRawAnnotationsJson = (project: Project): string =>
+  JSON.stringify(getRawAnnotationData(project), null, 2);
+
+export const generateRawAnnotationsCsv = (project: Project): string => {
+  const headers = [
+    'ProjectId', 'ProjectName', 'StreamId', 'StreamName', 'ParentStreamId', 'ParentStreamName', 'SegmentId',
+    'CodeId', 'Label', 'Color', 'ParentCodeId', 'ParentLabel', 'PreviousSegmentId',
+    'StartTime', 'EndTime', 'Duration', 'Note'
+  ];
+  const rows = getRawAnnotationData(project).map(item => [
+    item.projectId,
+    item.projectName,
+    item.streamId,
+    item.streamName,
+    item.parentStreamId,
+    item.parentStreamName,
+    item.segmentId,
+    item.codeId,
+    item.label,
+    item.color,
+    item.parentCodeId,
+    item.parentLabel,
+    item.previousSegmentId,
+    item.startTime.toFixed(3),
+    item.endTime.toFixed(3),
+    item.duration.toFixed(3),
+    item.note
+  ].map(escapeCsvCell).join(','));
+
+  // The BOM keeps non-ASCII project names, labels, and notes readable in Excel.
+  return `\uFEFF${[headers.join(','), ...rows].join('\n')}`;
+};
+
 export const generateSequenceJson = (project: Project, stream: TimelineStream): string => {
   const effectiveDuration = calculateEffectiveDuration(project);
   const streamSegments = project.segments.filter(s => s.streamId === stream.id).sort((a, b) => a.startTime - b.startTime);
@@ -307,6 +410,16 @@ export const saveProjectPackage = async (project: Project, videoFile: File | nul
       await wThemeCsv.write(generateTranscriptThemeCsvContent(project));
       await wThemeCsv.close();
 
+      const rawCsvHandle = await projectDir.getFileHandle(`raw_annotations.csv`, { create: true });
+      const wRawCsv = await rawCsvHandle.createWritable();
+      await wRawCsv.write(generateRawAnnotationsCsv(project));
+      await wRawCsv.close();
+
+      const rawJsonHandle = await projectDir.getFileHandle(`raw_annotations.json`, { create: true });
+      const wRawJson = await rawJsonHandle.createWritable();
+      await wRawJson.write(generateRawAnnotationsJson(project));
+      await wRawJson.close();
+
       for (const stream of project.streams) {
         const streamSafeName = stream.name.replace(/\s+/g, '_').toLowerCase();
         
@@ -341,7 +454,8 @@ export const saveProjectPackage = async (project: Project, videoFile: File | nul
   }
 
   downloadFile(`${safeName}_report.html`, generateHtmlContent(project), 'text/html');
-  // 同样下载主题统计 CSV
-  downloadFile(`${safeName}_transcript_themes.csv`, generateTranscriptThemeCsvContent(project), 'text/csv');
+  downloadFile(`${safeName}_transcript_themes.csv`, generateTranscriptThemeCsvContent(project), 'text/csv;charset=utf-8');
+  downloadFile(`${safeName}_raw_annotations.csv`, generateRawAnnotationsCsv(project), 'text/csv;charset=utf-8');
+  downloadFile(`${safeName}_raw_annotations.json`, generateRawAnnotationsJson(project), 'application/json');
   return true;
 };

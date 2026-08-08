@@ -1,19 +1,74 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid
 } from 'recharts';
-import { Project, UNCODED_COLOR, UNCODED_LABEL } from '../types';
-import { Clock, Download, FileSpreadsheet, FileJson } from 'lucide-react';
+import { CodeDefinition, Project, UNCODED_COLOR, UNCODED_LABEL } from '../types';
+import { GitBranch, Layers3, PieChart as PieChartIcon } from 'lucide-react';
 
 interface AnalyticsProps {
   project: Project;
 }
 
+type AnalyticsView = 'overview' | 'sunburst' | 'tree';
+
+const polarPoint = (radius: number, angle: number) => {
+  const radians = (angle - 90) * Math.PI / 180;
+  return { x: 300 + radius * Math.cos(radians), y: 300 + radius * Math.sin(radians) };
+};
+
+const ringArcPath = (innerRadius: number, outerRadius: number, startAngle: number, endAngle: number) => {
+  const safeEnd = Math.min(endAngle, startAngle + 359.999);
+  const outerStart = polarPoint(outerRadius, startAngle);
+  const outerEnd = polarPoint(outerRadius, safeEnd);
+  const innerEnd = polarPoint(innerRadius, safeEnd);
+  const innerStart = polarPoint(innerRadius, startAngle);
+  const largeArc = safeEnd - startAngle > 180 ? 1 : 0;
+
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerEnd.x} ${innerEnd.y}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}`,
+    'Z'
+  ].join(' ');
+};
+
 const Analytics: React.FC<AnalyticsProps> = ({ project }) => {
+  const [activeView, setActiveView] = useState<AnalyticsView>('overview');
   const { streams, segments, transcriptCodes, duration, subtitles } = project;
 
   const effectiveDuration = duration || Math.max(...segments.map(s => s.endTime), ...subtitles.map(s => s.endTime), 10);
+
+  const orderedStreams = (() => {
+    const result: typeof streams = [];
+    const visited = new Set<string>();
+    const append = (parentId?: string) => streams
+      .filter(stream => {
+        const normalizedParent = stream.parentId && streams.some(candidate => candidate.id === stream.parentId) ? stream.parentId : undefined;
+        return normalizedParent === parentId && !visited.has(stream.id);
+      })
+      .forEach(stream => {
+        visited.add(stream.id);
+        result.push(stream);
+        append(stream.id);
+      });
+    append();
+    streams.filter(stream => !visited.has(stream.id)).forEach(stream => result.push(stream));
+    return result;
+  })();
+
+  const streamDepth = (streamId: string) => {
+    let depth = 0;
+    let current = streams.find(stream => stream.id === streamId);
+    const visited = new Set<string>();
+    while (current?.parentId && !visited.has(current.parentId)) {
+      visited.add(current.parentId);
+      current = streams.find(stream => stream.id === current?.parentId);
+      if (current) depth += 1;
+    }
+    return depth;
+  };
 
   const getStreamStats = (streamId: string, codes: any[]) => {
     const streamSegments = segments.filter(s => s.streamId === streamId).sort((a, b) => a.startTime - b.startTime);
@@ -41,6 +96,41 @@ const Analytics: React.FC<AnalyticsProps> = ({ project }) => {
     color: c.color
   })).filter(d => d.count > 0);
 
+  const renderCodeTree = (streamId: string, codes: CodeDefinition[], parentId?: string, visited = new Set<string>()): React.ReactNode => {
+    const children = codes.filter(code => {
+      const normalizedParent = code.parentId && codes.some(candidate => candidate.id === code.parentId) ? code.parentId : undefined;
+      return normalizedParent === parentId && !visited.has(code.id);
+    });
+    return children.map(code => {
+      const nextVisited = new Set(visited).add(code.id);
+      const codeSegments = segments
+        .filter(segment => segment.streamId === streamId && segment.codeId === code.id)
+        .sort((a, b) => a.startTime - b.startTime);
+      return (
+        <li key={code.id} className="ml-5 border-l border-slate-700 pl-4 py-2">
+          <div className="flex items-center gap-3">
+            <span className="w-3 h-3 rounded-full" style={{ backgroundColor: code.color }} />
+            <span className="font-bold text-slate-200">{code.label}</span>
+            <span className="text-[10px] font-mono text-slate-500">{codeSegments.length} segments</span>
+          </div>
+          {codeSegments.length > 0 && (
+            <div className="ml-6 mt-2 flex flex-wrap gap-2 text-[10px] font-mono text-slate-400">
+              {codeSegments.map((segment, index) => (
+                <React.Fragment key={segment.id}>
+                  {index > 0 && <span className="text-slate-600">→</span>}
+                  <span className="bg-slate-800 border border-slate-700 rounded px-2 py-1" title={segment.note || undefined}>
+                    {segment.startTime.toFixed(2)}s–{segment.endTime.toFixed(2)}s
+                  </span>
+                </React.Fragment>
+              ))}
+            </div>
+          )}
+          {codes.some(child => child.parentId === code.id) && <ul>{renderCodeTree(streamId, codes, code.id, nextVisited)}</ul>}
+        </li>
+      );
+    });
+  };
+
   return (
     <div className="h-full overflow-y-auto bg-slate-950 p-8 space-y-12">
       <header className="border-b border-slate-800 pb-6 flex justify-between items-end">
@@ -52,6 +142,90 @@ const Analytics: React.FC<AnalyticsProps> = ({ project }) => {
           Total Duration: {effectiveDuration.toFixed(2)}s
         </div>
       </header>
+
+      <div className="flex gap-2 bg-slate-900/80 border border-slate-800 rounded-xl p-1.5 w-fit">
+        {([
+          ['overview', 'Overview', PieChartIcon],
+          ['sunburst', 'Aligned Sunburst', Layers3],
+          ['tree', 'Hierarchy & Evolution', GitBranch]
+        ] as const).map(([view, label, Icon]) => (
+          <button key={view} onClick={() => setActiveView(view)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors ${activeView === view ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+            <Icon className="w-4 h-4" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {activeView === 'sunburst' && (
+        <section className="bg-slate-900/50 border border-slate-800 rounded-2xl p-8">
+          <div className="mb-6">
+            <h3 className="text-xl font-bold text-slate-200">Time-aligned multi-stream sunburst</h3>
+            <p className="text-sm text-slate-500 mt-1">All rings share the same clockwise timeline, starting at 12 o'clock. Each ring is one stream.</p>
+          </div>
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(420px,620px)_1fr] gap-10 items-center">
+            <svg viewBox="0 0 600 600" className="w-full max-w-[620px] mx-auto" role="img" aria-label="Concentric timeline with one ring per analysis stream">
+              {orderedStreams.map((stream, streamIndex) => {
+                const ringStep = Math.min(42, 185 / Math.max(orderedStreams.length, 1));
+                const innerRadius = 85 + streamIndex * ringStep;
+                const ringWidth = Math.max(1.5, ringStep - Math.min(6, ringStep * 0.2));
+                const outerRadius = innerRadius + ringWidth;
+                return (
+                  <g key={stream.id}>
+                    <circle cx="300" cy="300" r={(innerRadius + outerRadius) / 2} fill="none" stroke="#1e293b" strokeWidth={ringWidth} />
+                    {segments.filter(segment => segment.streamId === stream.id).map(segment => {
+                      const code = stream.codes.find(item => item.id === segment.codeId);
+                      if (!code || effectiveDuration <= 0) return null;
+                      const startAngle = Math.max(0, segment.startTime / effectiveDuration * 360);
+                      const endAngle = Math.min(360, segment.endTime / effectiveDuration * 360);
+                      if (endAngle <= startAngle) return null;
+                      return (
+                        <path key={segment.id} d={ringArcPath(innerRadius, outerRadius, startAngle, endAngle)} fill={code.color} stroke="#020617" strokeWidth="1">
+                          <title>{stream.name} · {code.label}: {segment.startTime.toFixed(2)}s–{segment.endTime.toFixed(2)}s</title>
+                        </path>
+                      );
+                    })}
+                  </g>
+                );
+              })}
+              <circle cx="300" cy="300" r="72" fill="#0f172a" stroke="#334155" />
+              <text x="300" y="292" textAnchor="middle" fill="#e2e8f0" fontSize="18" fontWeight="700">{effectiveDuration.toFixed(1)}s</text>
+              <text x="300" y="316" textAnchor="middle" fill="#64748b" fontSize="11">clockwise timeline</text>
+            </svg>
+            <div className="space-y-5">
+              {orderedStreams.map((stream, index) => (
+                <div key={stream.id} className="border-b border-slate-800 pb-4">
+                  <div className="text-sm font-bold text-slate-200 mb-2" style={{ paddingLeft: `${streamDepth(stream.id) * 16}px` }}>
+                    Ring {index + 1}: {stream.name}{stream.parentId ? ' ↳ child stream' : ''}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {stream.codes.map(code => (
+                      <span key={code.id} className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: code.color }} />{code.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {activeView === 'tree' && (
+        <section className="space-y-6">
+          {orderedStreams.map((stream, index) => (
+            <div key={stream.id} className="bg-slate-900/50 border border-slate-800 rounded-2xl p-7" style={{ marginLeft: `${streamDepth(stream.id) * 28}px` }}>
+              <div className="flex items-center gap-3 mb-4">
+                <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-1 rounded-full">{stream.parentId ? 'CHILD STREAM' : `STREAM ${index + 1}`}</span>
+                <h3 className="text-lg font-bold text-slate-200">{stream.name}</h3>
+              </div>
+              <ul>{renderCodeTree(stream.id, stream.codes)}</ul>
+              {stream.codes.length === 0 && <p className="text-sm text-slate-500">No codes defined.</p>}
+            </div>
+          ))}
+        </section>
+      )}
+
+      {activeView === 'overview' && <>
 
       {/* 循环渲染每个 Stream 的分析 */}
       {streams.map((stream, idx) => {
@@ -124,6 +298,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ project }) => {
           </ResponsiveContainer>
         </div>
       </section>
+      </>}
     </div>
   );
 };

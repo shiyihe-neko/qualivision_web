@@ -164,9 +164,9 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddStream = (index: number) => {
+  const handleAddStream = (index: number, parentId?: string) => {
     const streamName = `New Stream ${project.streams.length + 1}`;
-    const newStream = createNewStream(streamName, DEFAULT_STREAMS_CONFIG[0].codes);
+    const newStream = { ...createNewStream(streamName, DEFAULT_STREAMS_CONFIG[0].codes), parentId };
     setProject(prev => {
       const currentStreams = prev.streams || [];
       const newStreams = [...currentStreams];
